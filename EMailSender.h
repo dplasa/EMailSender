@@ -2,6 +2,7 @@
  *
  * MIT license
  * written by Renzo Mischianti
+ * modified by Daniel Plasa
  */
 
 #ifndef EMailSender_h
@@ -9,28 +10,15 @@
 
 #include <WiFiClientSecure.h>
 
-#if ARDUINO >= 100
-#include "Arduino.h"
-#else
-#include "WProgram.h"
-#endif
-
 // Uncomment if you use esp8266 core <= 2.4.2
 // #define ARDUINO_ESP8266_RELEASE_2_4_2
 
-// Uncomment to enable printing out nice debug messages.
-// #define EMAIL_SENDER_DEBUG
+// Use ESP8266 Core Debug functionality
 
-// Define where debug output will be printed.
-#define DEBUG_PRINTER Serial
-
-// Setup debug printing macros.
-#ifdef EMAIL_SENDER_DEBUG
-	#define DEBUG_PRINT(...) { DEBUG_PRINTER.print(__VA_ARGS__); }
-	#define DEBUG_PRINTLN(...) { DEBUG_PRINTER.println(__VA_ARGS__); }
+#ifdef DEBUG_ESP_PORT
+	#define DEBUG_MSG(fmt, ...) do { DEBUG_ESP_PORT.printf_P( PSTR(fmt "\n"),  ##__VA_ARGS__ ); } while (0)
 #else
-	#define DEBUG_PRINT(...) {}
-	#define DEBUG_PRINTLN(...) {}
+	#define DEBUG_MSG(...)
 #endif
 
 class EMailSender {

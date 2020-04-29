@@ -4,7 +4,7 @@
 
 ## Tutorial: 
 
-To download. click the DOWNLOADS button in the top right corner, rename the uncompressed folder EMailSender. Check that the EMailSender folder contains `EMailSender\\.cpp` and `EMailSender.h`. Place the DHT library folder your `<arduinosketchfolder>/libraries/` folder. You may need to create the libraries subfolder if its your first library. Restart the IDE.
+To download. click the DOWNLOADS button in the top right corner, rename the uncompressed folder EMailSender. Check that the EMailSender folder contains `EMailSender.cpp` and `EMailSender.h`. Place the EMailSender library folder in your `<arduinosketchfolder>/libraries/` folder. You may need to create the libraries subfolder if its your first library. Restart the IDE.
 
 # Reef complete EMailSender library to send EMail.
 I try to rationalize a famous library like Gsender. 
@@ -21,7 +21,7 @@ If you want use onother provider you can use more complex (but simple) contructo
 
 ```
 
-You must connect to WIFI :P.
+You must be connected to WIFI! To enable debugging, enable debug messages in your IDE (see [IDE Debugging](https://arduino-esp8266.readthedocs.io/en/latest/Troubleshooting/debugging.html) !)
 
 Create a message with the structure EMailMessage
 ```cpp

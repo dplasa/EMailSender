@@ -60,13 +60,10 @@ int base64_enc_length(int plainLen) {
 const char* encode64_f(char* input, uint8_t len) {
   // encoding
 
-	DEBUG_PRINTLN(F("Encoding"));
-
-	DEBUG_PRINTLN(input);
-	DEBUG_PRINTLN(len);
+	DEBUG_MSG("Encoding %d bytes: %s", len, input);
 
   //int encodedLen =
- base64_enc_length(len);
+  base64_enc_length(len);
   static char encoded[256];
   // note input is consumed in this step: it will be empty afterwards
   base64_encode(encoded, input, len);
@@ -145,7 +142,7 @@ EMailSender::Response EMailSender::awaitSMTPResponse(WiFiClientSecure &client,
 	}
 	_serverResponce = client.readStringUntil('\n');
 
-	DEBUG_PRINTLN(_serverResponce);
+	DEBUG_MSG("%s", _serverResponce.c_str() );
 	if (resp && _serverResponce.indexOf(resp) == -1){
 		response.code = resp;
 		response.desc = respDesc;
@@ -161,16 +158,14 @@ EMailSender::Response EMailSender::send(const char* to, EMailMessage &email)
 {
   WiFiClientSecure client;
 
-  DEBUG_PRINT(F("Insecure client:"));
-  DEBUG_PRINTLN(this->isSecure);
+  DEBUG_MSG("Insecure client: %d", this->isSecure);
 
 #ifndef ARDUINO_ESP8266_RELEASE_2_4_2
   if (this->isSecure == false){
 	  client.setInsecure();
 	  bool mfln = client.probeMaxFragmentLength(this->smtp_server, this->smtp_port, 512);
 
-	  DEBUG_PRINT("MFLN supported: ");
-	  DEBUG_PRINTLN(mfln?"yes":"no");
+	  DEBUG_MSG("MFLN supported: %S", mfln ? PSTR("yes") : PSTR("no"));
 
 	  if (mfln) {
 		  client.setBufferSizes(512, 512);
@@ -193,14 +188,14 @@ EMailSender::Response EMailSender::send(const char* to, EMailMessage &email)
 
 
 
-  DEBUG_PRINTLN(F("HELO friend:"));
+  DEBUG_MSG("HELO friend:");
   client.println(F("HELO friend"));
 
   response = awaitSMTPResponse(client, "250", "Identification error");
   if (!response.status) return response;
 
 
-  DEBUG_PRINTLN(F("AUTH LOGIN:"));
+  DEBUG_MSG("AUTH LOGIN:");
   client.println(F("AUTH LOGIN"));
   awaitSMTPResponse(client);
 
@@ -225,7 +220,7 @@ EMailSender::Response EMailSender::send(const char* to, EMailMessage &email)
   client.println(rcpt);
   awaitSMTPResponse(client);
 
-  DEBUG_PRINTLN(F("DATA:"));
+  DEBUG_MSG("DATA:");
   client.println(F("DATA"));
 
   response = awaitSMTPResponse(client, "354", "SMTP DATA error");
@@ -259,4 +254,3 @@ EMailSender::Response EMailSender::send(const char* to, EMailMessage &email)
 
   return response;
 }
-
