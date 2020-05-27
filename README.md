@@ -1,55 +1,53 @@
-# Library to send EMail via esp8266. 
-
-### [Updated tutorial on my site](https://www.mischianti.org/2019/09/10/send-email-with-esp8266-and-arduino/)
+# Library to send EMail via ESP8266/ESP32 
 
 ## Tutorial: 
 
-To download. click the DOWNLOADS button in the top right corner, rename the uncompressed folder EMailSender. Check that the EMailSender folder contains `EMailSender.cpp` and `EMailSender.h`. Place the EMailSender library folder in your `<arduinosketchfolder>/libraries/` folder. You may need to create the libraries subfolder if its your first library. Restart the IDE.
+To download. click the DOWNLOADS button in the top right corner, rename the uncompressed folder SMTPSender. Check that the SMTPSender folder contains `SMTPSender.cpp` and `SMTPSender.h`. Place the SMTPSender library folder in your `<arduinosketchfolder>/libraries/` folder. You may need to create the libraries subfolder if its your first library. Restart the IDE.
 
-# Reef complete EMailSender library to send EMail.
-I try to rationalize a famous library like Gsender. 
+## SMTP / SMTPS
+This library provides an SMTPSender, which can only connect to unencrypted SMTP Servers. If you need to connect to a SMTPS server using SSL/TLS, you need to use the SMTPSSender. This will increase your compiled sketch by ~100k since all the ciphers need to be included.
 
-Constructor:
-Default value is quite simple and use GMail as smtp server. 
+### Constructor
+Just place somwhere in the beginning of your sketch one of the two possibilities: 
 ```cpp
-	EMailSender emailSend("smtp.account@gmail.com", "password");
+	SMTPSender plainSender;     // just able to talk to smtp servers
+    SMTPSSender fancySSLSender; // can only talk to smtps servers
 ```
 
-If you want use onother provider you can use more complex (but simple) contructor
+### Provide your smtp server's credentials
+To provide your smtp(s) server's credentials, you need to call `begin()` with ServerInfo:
 ```cpp
-	EMailSender(const char* email_login, const char* email_password, const char* email_from, const char* smtp_server, uint16_t smtp_port);
-
+    SMTPSender::ServerInfo mailServer("myLogin", "myPassword", "smtp.eample.com", 25);
+	plainSender.begin(mailServer);
 ```
 
-You must be connected to WIFI! To enable debugging, enable debug messages in your IDE (see [IDE Debugging](https://arduino-esp8266.readthedocs.io/en/latest/Troubleshooting/debugging.html) !)
+### Sending a Mail
+To send a Mail, there are two ways:
+* send the mail blocking, i.e. the function will only return on error or if the mail was sent:
+    ```cpp
+        SMTPSender::Message message("from@example.com", "to@example.com", "Subject", "Message");
+        SMTPSender::Status s = plainSender.send(message);
+        if (s.code = 0)
+            // send ok
+        else
+            // send failed, see s.code and s.desc (string) for the reason
+    ```
+* queue the mail without blocking. Make sure to call `handleSMTP()` frequently, e.g. in `loop()`
+    ```cpp
+        SMTPSender::Message message("from@example.com", "to@example.com", "Subject", "Message");
+        if (plainSender.queue(message))
+            // message queued
+        else
+            // queue failed, a previous mail has not yet been fully processed
+    ```
+    To check, if the mail was sent, get the Status with `check()`:  
+    ```cpp
+        SMTPSender::Status s = plainSender.send(message);
+        if (s.code = 0)
+            // send ok
+        else
+            // send failed, see s.code and s.desc (string) for the reason
+    ```
 
-Create a message with the structure EMailMessage
-```cpp
-    EMailSender::EMailMessage message;
-    message.subject = "Subject";
-    message.message = "Hi, How are you<br>Fine.";
-```
-
-Send message:
-```cpp
-    EMailSender::Response resp = emailSend.send("account_to_send@gmail.com", message);
-```
-
-Then check the response:
-```cpp
-    Serial.println("Sending status: ");
-    Serial.println(resp.code);
-    Serial.println(resp.desc);
-    Serial.println(resp.status);
-```
-
-Example output:
-
-```cpp
-Connection: ESTABLISHED
-Got IP address: 192.168.1.104
-Sending status: 
-1
-0
-Message sent!
-```
+### Spoiler
+Of course you need to be connected to WIFI. To enable debugging on the Serial monitor, enable debug messages in your IDE (see [IDE Debugging](https://arduino-esp8266.readthedocs.io/en/latest/Troubleshooting/debugging.html))
