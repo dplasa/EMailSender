@@ -8,6 +8,7 @@
  * 3. Supply now two ways of sending an email:
  *    a)  send()  - blocking, returns if sent or error
  *    b)  queue() - non-blocking, returns immedeate. call check() for status of process
+ * 4. use esp8266 polledTimeout timeout library for the timeout handling
  * 
  *    When using non-blocking mode, be sure to call handleSMTP() frequently, e.g. in loop().
  */
@@ -16,8 +17,11 @@
 #define SMTPSender_h
 
 #include <WString.h>
+#include <time.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
+#include <PolledTimeout.h>
+using esp8266::polledTimeout::oneShotMs; // import the type to the local namespace
 
 // Use ESP8266 Core Debug functionality
 #ifdef DEBUG_ESP_PORT
@@ -34,6 +38,11 @@
 class SMTPSender
 {
 public:
+	static constexpr int16_t errorUninitialized = -1;
+	static constexpr int16_t errorAlreadyInProgress = -2;
+	static constexpr int16_t errorConnectionFailed = -3;
+	static constexpr int16_t errorTimeout = -4;
+
 	struct ServerInfo
 	{
 		ServerInfo(const String &_l, const String &_pw, const String &_sn, uint16_t _p, bool v = false) : login(_l), password(_pw), servername(_sn), port(_p), validateCA(v) {}
@@ -49,21 +58,28 @@ public:
 	{
 		Message(const String &_f, const String &_t, const String &_s, const String &_m) : from(_f), to(_t), subject(_s), message(_m) {}
 		Message() = default;
+		time_t date;
 		String from;
 		String to;
 		String subject;
 		String message;
 	};
 
+	typedef enum
+	{
+		OK,
+		PROGRESS,
+		ERROR,
+	} TransferResult;
+	
 	typedef struct
 	{
-		bool isSent = false;
-		bool isError = false;
-		uint16_t code;
+		TransferResult result = OK;
+		int16_t code;
 		String desc;
 	} Status;
 
-	SMTPSender() = default;
+	SMTPSender();
 
 	// initialize Sender with your smtp server credentials
 	void begin(const ServerInfo &server);
@@ -106,10 +122,11 @@ protected:
 	const Message *_email;
 
 	Status _serverStatus;
-	uint32_t waitUntil = 0;
 	virtual bool connect();
 	void printClientBase64(const String &msg);
-	bool waitFor(const uint16_t respCode, const __FlashStringHelper *errorString = nullptr, uint16_t timeOut = 10000);
+
+    oneShotMs aTimeout;  // timeout from esp8266 core library
+	bool waitFor(const int16_t respCode, const __FlashStringHelper *errorString = nullptr, uint16_t timeOut = 10000);
 };
 
 // basically just the same as SMTP sender but has a different connect() method to account for SSL/TLS

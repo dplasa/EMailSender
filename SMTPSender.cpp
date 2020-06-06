@@ -14,6 +14,12 @@
     client->printf_P(PSTR(fmt "\n"), ##__VA_ARGS__); \
   } while (0)
 
+SMTPSender::SMTPSender() : aTimeout(0)
+{
+  // set aTimeout to never expire, will be used later by ::waitFor(...)
+  aTimeout.resetToNeverExpires();
+}
+
 void SMTPSender::begin(const ServerInfo &theServer)
 {
   _server = &theServer;
@@ -21,13 +27,17 @@ void SMTPSender::begin(const ServerInfo &theServer)
 
 bool SMTPSender::queue(const Message &theEmail)
 {
+  _serverStatus.result = PROGRESS;
   if (smtpState >= cIdle)
   {
-    _serverStatus.isSent = false;
-    _serverStatus.isError = false;
     _email = &theEmail;
     smtpState = cConnect;
     return true;
+  }
+  else
+  {
+    // return error code with status "in PROGRESS"
+    _serverStatus.code = errorAlreadyInProgress;
   }
   return false;
 }
@@ -54,12 +64,12 @@ void SMTPSender::handleSMTP()
 {
   if (_server == nullptr || _email == nullptr)
   {
-    _serverStatus.code = 65535;
+    _serverStatus.code = errorUninitialized;
     _serverStatus.desc = F("begin() not called");
   }
   else if (cConnect == smtpState)
   {
-    _serverStatus.code = 65534;
+    _serverStatus.code = errorConnectionFailed;
     _serverStatus.desc = F("No connection to SMTP server");
     if (connect())
     {
@@ -126,14 +136,27 @@ void SMTPSender::handleSMTP()
   {
     if (waitFor(354))
     {
+      // produce Maildate/Time in UTC
+      struct tm *_tm = gmtime(&_email->date);
+      String tmp = asctime(_tm);
+      tmp.trim();
+
       CLIENT_SEND("From: %s", _email->from.c_str());
       CLIENT_SEND("To: %s", _email->to.c_str());
-      CLIENT_SEND("Subject: %s\n", _email->subject.c_str());
-      CLIENT_SEND("Mime-Version: 1.0\n"
-                  "Content-Type: text/html; charset=utf-8\n"
-                  "Content-Transfer-Encoding: 7bit\n"
-                  "<!DOCTYPE html><html lang=\"en\">\n%s\n</html>\n\n.",
+      CLIENT_SEND("Subject: %s", _email->subject.c_str());
+      CLIENT_SEND("Date: %s", tmp.c_str());
+      CLIENT_SEND("Content-Type: text/plain; charset=utf-8\n"
+                  "Mime-Version: 1.0\n"
+                  "%s",
                   _email->message.c_str());
+      // FIXME, unclear...
+      // My mailserver only accepts the message, if I wait an somewhat arbitraty
+      // amount of time before accepting the "." to finish the message...
+      // or at least flush and then send the "." with another packet.
+      // strange but. Hey.
+      client->flush();
+      yield();
+      client->write(".\n");
       smtpState = cSendMessage;
     }
   }
@@ -147,24 +170,23 @@ void SMTPSender::handleSMTP()
   }
   else if (cSendOK == smtpState)
   {
-    smtpState = cQuit;
-    // dont wait for 221 Goofbye... speed things up and just close the connection!
-    // if (waitFor(221))
-    // {
-    //   smtpState = cQuit;
-    // }
+    // smtpState = cQuit;
+    if (waitFor(221))
+    {
+      smtpState = cQuit;
+    }
   }
   else if (cQuit == smtpState)
   {
     client->stop();
     delete client;
     client = NULL;
-    _serverStatus.isSent = true;
     smtpState = cIdle;
+    _serverStatus.result = OK;
   }
   else if (smtpState >= cTimeout)
   {
-    _serverStatus.isError = true;
+    _serverStatus.result = ERROR;
   }
 }
 
@@ -218,7 +240,7 @@ void SMTPSender::printClientBase64(const String &msg)
   DEBUG_MSG(">> %s [=> %s]", msg.c_str(), tmp.c_str());
   client->println(tmp);
 
-/*  Base64Coder coder;
+  /*  Base64Coder coder;
   String tmp;
 
 #if defined DEBUG_MSG
@@ -253,22 +275,22 @@ void SMTPSender::printClientBase64(const String &msg)
   */
 }
 
-bool SMTPSender::waitFor(const uint16_t respCode, const __FlashStringHelper *errorString, uint16_t timeOut)
+bool SMTPSender::waitFor(const int16_t respCode, const __FlashStringHelper *errorString, uint16_t timeOut)
 {
   // initalize waiting
-  if (0 == waitUntil)
+  if (!aTimeout.canExpire())
   {
-    waitUntil = millis();
-    waitUntil += timeOut;
+    aTimeout.reset(timeOut);
     _serverStatus.desc.remove(0);
   }
   else
   {
     // timeout
-    if ((int32_t)(millis() - waitUntil) >= 0)
+    if (aTimeout.expired())
     {
-      DEBUG_MSG("Waiting for code %u - timeout!", respCode);
-      _serverStatus.code = 65535;
+      aTimeout.resetToNeverExpires();
+      DEBUG_MSG("Waiting for code %d - timeout!", respCode);
+      _serverStatus.code = errorTimeout;
       if (errorString)
       {
         _serverStatus.desc = errorString;
@@ -278,7 +300,6 @@ bool SMTPSender::waitFor(const uint16_t respCode, const __FlashStringHelper *err
         _serverStatus.desc = F("timeout");
       }
       smtpState = cTimeout;
-      waitUntil = 0;
       return false;
     }
 
@@ -295,7 +316,7 @@ bool SMTPSender::waitFor(const uint16_t respCode, const __FlashStringHelper *err
           continue;
 
         // line complete, evaluate code
-        _serverStatus.code = strtol(_serverStatus.desc.c_str(), NULL, 0);
+        _serverStatus.code = atoi(_serverStatus.desc.c_str());
         if (respCode != _serverStatus.code)
         {
           smtpState = cError;
@@ -305,8 +326,7 @@ bool SMTPSender::waitFor(const uint16_t respCode, const __FlashStringHelper *err
         {
           DEBUG_MSG("Waiting for code %u success, SMTP server replies: %s", respCode, _serverStatus.desc.c_str());
         }
-
-        waitUntil = 0;
+        aTimeout.resetToNeverExpires();
         return (respCode == _serverStatus.code);
       }
       else
